@@ -1,0 +1,9 @@
+node_modules/
+.env
+*.log
+package-lock.json
+# (only if you want to keep lock files out, usually better to keep them, but I'll follow standard ignores)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
