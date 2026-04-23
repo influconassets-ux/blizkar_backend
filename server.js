@@ -2,6 +2,7 @@ const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const express = require('express');
+const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const connectDB = require('./config/db');
@@ -9,6 +10,12 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 
 const interactionRoutes = require('./routes/interactionRoutes');
+
+// Pre-load models to register them with Mongoose
+require('./models/User');
+require('./models/Message');
+require('./models/Notification');
+require('./models/Transaction');
 
 // Load env vars
 dotenv.config();
@@ -38,6 +45,7 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/interactions', require('./routes/interactionRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
@@ -54,7 +62,91 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const http = require('http');
+const { Server } = require('socket.io');
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
+});
+
+const Message = require('./models/Message');
+const User = require('./models/User');
+
+// Socket.io connection logic
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
+
+    socket.on('join', (userId) => {
+        socket.join(userId);
+        console.log(`User ${userId} joined room`);
+    });
+
+    socket.on('sendMessage', async ({ sender, receiver, content, messageType }) => {
+        try {
+            if (!sender || !receiver || !content) return;
+
+            // Check if blocked
+            const receiverUser = await User.findById(receiver);
+            const senderUser = await User.findById(sender);
+
+            if (receiverUser && (receiverUser.blockedUsers || []).some(id => id.toString() === sender.toString())) {
+                console.log(`[Socket] Blocked: ${sender} -> ${receiver} (Receiver blocked sender)`);
+                return;
+            }
+            if (senderUser && (senderUser.blockedUsers || []).some(id => id.toString() === receiver.toString())) {
+                console.log(`[Socket] Blocked: ${sender} -> ${receiver} (Sender blocked receiver)`);
+                return;
+            }
+
+            const newMessage = new Message({
+                sender,
+                receiver,
+                content,
+                messageType: messageType || 'text',
+                read: false
+            });
+            await newMessage.save();
+
+            console.log(`[Socket] Message Sent: ${sender} -> ${receiver}`);
+
+            const sId = sender.toString();
+            const rId = receiver.toString();
+            
+            // Emit message to receiver and sender separately for maximum reliability
+            io.to(rId).emit('message', newMessage);
+            io.to(sId).emit('message', newMessage);
+        } catch (error) {
+            console.error('[Socket] Error sending message:', error);
+        }
+    });
+
+    socket.on('markRead', ({ senderId, receiverId }) => {
+        // When receiver (currentUser) marks messages as read, notify the sender
+        io.to(senderId).emit('messagesRead', { readerId: receiverId });
+    });
+
+    socket.on('typing', ({ senderId, receiverId }) => {
+        io.to(receiverId).emit('userTyping', { senderId });
+    });
+
+    socket.on('stopTyping', ({ senderId, receiverId }) => {
+        io.to(receiverId).emit('userStopTyping', { senderId });
+    });
+
+    socket.on('blockUpdate', ({ senderId, receiverId }) => {
+        io.to(receiverId).emit('blockStatusChanged', { senderId });
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected');
+    });
+});
+
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 });
+
