@@ -8,6 +8,8 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 
+const interactionRoutes = require('./routes/interactionRoutes');
+
 // Load env vars
 dotenv.config();
 
@@ -32,8 +34,10 @@ app.use((req, res, next) => {
 });
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/interactions', require('./routes/interactionRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {

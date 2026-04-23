@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema({
     drugs: String,
     intent: String,
     fantasies: [String],
+    coins: {
+        type: Number,
+        default: 1500
+    },
     role: {
         type: String,
         enum: ['user', 'admin'],

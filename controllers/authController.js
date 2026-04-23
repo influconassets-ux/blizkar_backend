@@ -10,7 +10,8 @@ const jwt = require('jsonwebtoken');
 // @access  Public
 exports.register = async (req, res) => {
     try {
-        const { email, password, ...otherDetails } = req.body;
+        const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+        const { password, ...otherDetails } = req.body;
 
         // Find existing incomplete user or check if already registered
         let user = await User.findOne({ email });
@@ -70,7 +71,8 @@ exports.register = async (req, res) => {
 // @access  Public
 exports.savePartial = async (req, res) => {
     try {
-        const { email, password, currentStep, ...details } = req.body;
+        const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+        const { password, currentStep, ...details } = req.body;
         if (!email) return res.status(400).json({ message: "Email required for partial save" });
 
         // Check if user is already completed
@@ -104,7 +106,8 @@ exports.savePartial = async (req, res) => {
 // @access  Public
 exports.login = async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+        const { password } = req.body;
 
         // Find user by email
         const user = await User.findOne({ email });
