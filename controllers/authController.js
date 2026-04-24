@@ -101,6 +101,24 @@ exports.savePartial = async (req, res) => {
     }
 };
 
+// @desc    Check if email exists
+// @route   POST /api/auth/check-email
+// @access  Public
+exports.checkEmail = async (req, res) => {
+    try {
+        const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
+        if (!email) return res.status(400).json({ message: "Email required" });
+
+        const user = await User.findOne({ email });
+        if (user && user.registrationStatus === 'completed') {
+            return res.status(200).json({ exists: true });
+        }
+        res.status(200).json({ exists: false });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 // @desc    Authenticate a user
 // @route   POST /api/auth/login
 // @access  Public
