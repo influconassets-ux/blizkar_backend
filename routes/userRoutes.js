@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers } = require('../controllers/userController');
-
+const { getUsers, toggleDiscreetMode, updateProfile } = require('../controllers/userController');
 const User = require('../models/User');
 
 router.get('/', getUsers);
+router.put('/discreet', toggleDiscreetMode);
+router.put('/profile', updateProfile);
 
 router.post('/block', async (req, res) => {
     try {

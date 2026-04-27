@@ -16,6 +16,7 @@ require('./models/User');
 require('./models/Message');
 require('./models/Notification');
 require('./models/Transaction');
+require('./models/Match');
 
 // Load env vars
 dotenv.config();
@@ -46,6 +47,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/interactions', require('./routes/interactionRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/matches', require('./routes/matchRoutes'));
 
 // Basic route
 app.get('/', (req, res) => {
@@ -73,32 +75,58 @@ const io = new Server(server, {
     }
 });
 
+// Make io accessible to controllers
+app.set('io', io);
+
 const Message = require('./models/Message');
 const User = require('./models/User');
 
 // Socket.io connection logic
+const userSockets = {}; // { userId: [socketId1, socketId2] }
+
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
 
     socket.on('join', (userId) => {
+        if (!userId) return;
         socket.join(userId);
+        socket.userId = userId;
+        
+        if (!userSockets[userId]) userSockets[userId] = [];
+        if (!userSockets[userId].includes(socket.id)) userSockets[userId].push(socket.id);
+        
         console.log(`User ${userId} joined room`);
+        io.emit('onlineUsers', Object.keys(userSockets));
     });
 
     socket.on('sendMessage', async ({ sender, receiver, content, messageType }) => {
         try {
             if (!sender || !receiver || !content) return;
 
-            // Check if blocked
             const receiverUser = await User.findById(receiver);
             const senderUser = await User.findById(sender);
 
+            // Check if blocked
             if (receiverUser && (receiverUser.blockedUsers || []).some(id => id.toString() === sender.toString())) {
                 console.log(`[Socket] Blocked: ${sender} -> ${receiver} (Receiver blocked sender)`);
                 return;
             }
             if (senderUser && (senderUser.blockedUsers || []).some(id => id.toString() === receiver.toString())) {
                 console.log(`[Socket] Blocked: ${sender} -> ${receiver} (Sender blocked receiver)`);
+                return;
+            }
+
+            // Check if matched
+            const Match = mongoose.model('Match');
+            const match = await Match.findOne({
+                $or: [
+                    { sender, receiver, status: 'accepted' },
+                    { sender: receiver, receiver: sender, status: 'accepted' }
+                ]
+            });
+
+            if (!match) {
+                console.log(`[Socket] Rejected: ${sender} -> ${receiver} (Not matched)`);
                 return;
             }
 
@@ -142,6 +170,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        const userId = socket.userId;
+        if (userId && userSockets[userId]) {
+            userSockets[userId] = userSockets[userId].filter(id => id !== socket.id);
+            if (userSockets[userId].length === 0) {
+                delete userSockets[userId];
+            }
+        }
+        io.emit('onlineUsers', Object.keys(userSockets));
         console.log('User disconnected');
     });
 });

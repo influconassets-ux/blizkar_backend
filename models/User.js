@@ -55,6 +55,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: 'Email'
     },
+    discreetMode: {
+        type: Boolean,
+        default: false
+    },
     blockedUsers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'

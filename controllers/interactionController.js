@@ -1,5 +1,6 @@
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const Match = require('../models/Match');
 
 // @desc    Send a gift and create notification
 // @route   POST /api/interactions/gift
@@ -37,6 +38,40 @@ exports.sendGift = async (req, res) => {
         });
 
         await notification.save();
+
+        // Emit real-time notification
+        const io = req.app.get('io');
+        if (io) {
+            io.to(recipientId.toString()).emit('newNotification', notification);
+        }
+
+        // Handle Match Logic
+        // Check if a match already exists (in either direction)
+        const existingMatch = await Match.findOne({
+            $or: [
+                { sender: senderId, receiver: recipientId },
+                { sender: recipientId, receiver: senderId }
+            ]
+        });
+
+        if (!existingMatch) {
+            // Create a new pending match request
+            const newMatch = new Match({
+                sender: senderId,
+                receiver: recipientId,
+                status: 'pending',
+                giftSent: true
+            });
+            await newMatch.save();
+        } else if (existingMatch.status === 'declined') {
+            // If it was declined, sending another gift re-opens it as pending
+            existingMatch.status = 'pending';
+            existingMatch.sender = senderId;
+            existingMatch.receiver = recipientId;
+            existingMatch.giftSent = true;
+            await existingMatch.save();
+        }
+        // If it's already 'pending' or 'accepted', we just continue (gift is still sent)
 
         res.status(201).json({ 
             message: "Gift sent successfully", 

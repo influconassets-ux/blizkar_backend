@@ -5,15 +5,94 @@ const mongoose = require('mongoose');
 // We use model names to avoid direct require issues if they occur
 const Message = mongoose.model('Message');
 const User = mongoose.model('User');
+const Match = mongoose.model('Match');
 
-// 1. Specific routes FIRST
-router.get('/conversations/:userId', async (req, res) => {
+// 1. Admin Routes (Prioritize these)
+router.get('/admin/conversations/:userId', async (req, res) => {
     try {
         const { userId } = req.params;
 
         // Find all messages involving this user
         const messages = await Message.find({
-            $or: [{ sender: userId }, { receiver: userId }]
+            $or: [
+                { sender: userId },
+                { receiver: userId }
+            ]
+        })
+        .sort({ createdAt: -1 })
+        .populate('sender', 'name photos')
+        .populate('receiver', 'name photos');
+
+        const conversationMap = new Map();
+
+        for (const msg of messages) {
+            if (!msg.sender || !msg.receiver) continue;
+
+            const senderId = msg.sender._id.toString();
+            const receiverId = msg.receiver._id.toString();
+            
+            const isSender = senderId === userId;
+            const otherUser = isSender ? msg.receiver : msg.sender;
+            const otherUserId = otherUser._id.toString();
+
+            if (!conversationMap.has(otherUserId)) {
+                conversationMap.set(otherUserId, {
+                    userId: otherUserId,
+                    name: otherUser.name || 'Unknown User',
+                    img: otherUser.photos?.[0] || 'https://i.pravatar.cc/150',
+                    lastMsg: msg.messageType === 'image' ? '📷 Photo' : (msg.messageType === 'gift' ? '🎁 Gift' : msg.content),
+                    createdAt: msg.createdAt
+                });
+            }
+        }
+
+        res.json(Array.from(conversationMap.values()));
+    } catch (error) {
+        console.error("Error fetching admin conversations:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+router.get('/admin/history/:userId/:otherUserId', async (req, res) => {
+    try {
+        const { userId, otherUserId } = req.params;
+
+        const messages = await Message.find({
+            $or: [
+                { sender: userId, receiver: otherUserId },
+                { sender: otherUserId, receiver: userId }
+            ]
+        }).sort({ createdAt: 1 });
+        res.json(messages);
+    } catch (error) {
+        console.error("Error fetching admin messages:", error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// 2. Specific routes
+router.get('/conversations/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        // Fetch accepted matches first
+        const acceptedMatches = await Match.find({
+            $or: [
+                { sender: userId, status: 'accepted' },
+                { receiver: userId, status: 'accepted' }
+            ]
+        });
+
+        const matchedUserIds = acceptedMatches.map(m => 
+            m.sender.toString() === userId ? m.receiver.toString() : m.sender.toString()
+        );
+
+        // Find all messages involving this user AND matched users
+        const messages = await Message.find({
+            $or: [
+                { sender: userId, receiver: { $in: matchedUserIds } },
+                { receiver: userId, sender: { $in: matchedUserIds } }
+            ]
         })
         .sort({ createdAt: -1 })
         .populate('sender', 'name photos')
@@ -88,6 +167,19 @@ router.get('/unread-senders/:userId', async (req, res) => {
 router.get('/:userId/:otherUserId', async (req, res) => {
     try {
         const { userId, otherUserId } = req.params;
+
+        // Verify match status
+        const isMatched = await Match.findOne({
+            $or: [
+                { sender: userId, receiver: otherUserId, status: 'accepted' },
+                { sender: otherUserId, receiver: userId, status: 'accepted' }
+            ]
+        });
+
+        if (!isMatched) {
+            return res.status(403).json({ message: "You can only chat after a match is accepted" });
+        }
+
         const messages = await Message.find({
             $or: [
                 { sender: userId, receiver: otherUserId },
