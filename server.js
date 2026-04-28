@@ -111,13 +111,14 @@ io.on('connection', (socket) => {
 
     socket.on('join', (userId) => {
         if (!userId) return;
-        socket.join(userId);
-        socket.userId = userId;
+        const normalizedId = userId.toString();
+        socket.join(normalizedId);
+        socket.userId = normalizedId;
         
-        if (!userSockets[userId]) userSockets[userId] = [];
-        if (!userSockets[userId].includes(socket.id)) userSockets[userId].push(socket.id);
+        if (!userSockets[normalizedId]) userSockets[normalizedId] = [];
+        if (!userSockets[normalizedId].includes(socket.id)) userSockets[normalizedId].push(socket.id);
         
-        console.log(`User ${userId} joined room`);
+        console.log(`User ${normalizedId} joined room`);
         io.emit('onlineUsers', Object.keys(userSockets));
     });
 
@@ -204,6 +205,58 @@ io.on('connection', (socket) => {
 
     socket.on('blockUpdate', ({ senderId, receiverId }) => {
         io.to(receiverId).emit('blockStatusChanged', { senderId });
+    });
+
+    // --- WebRTC Calling Logic ---
+    socket.on('callUser', ({ userToCall, signalData, from, name, callType, photo }) => {
+        const target = userToCall?.toString();
+        const targets = new Set();
+        const roomSockets = io.sockets.adapter.rooms.get(target);
+        if (roomSockets) roomSockets.forEach(id => targets.add(id));
+        if (userSockets[target]) userSockets[target].forEach(id => targets.add(id));
+
+        console.log(`📞 [Socket] Call from ${from} to ${target}. Photo included: ${!!photo}`);
+        targets.forEach(sid => {
+            io.to(sid).emit('incomingCall', { signal: signalData, from, name, callType, photo });
+        });
+    });
+
+    socket.on('answerCall', (data) => {
+        const target = data.to?.toString();
+        const targets = new Set();
+        const roomSockets = io.sockets.adapter.rooms.get(target);
+        if (roomSockets) roomSockets.forEach(id => targets.add(id));
+        if (userSockets[target]) userSockets[target].forEach(id => targets.add(id));
+
+        console.log(`✅ [Socket] Call answered. Sending to ${targets.size} unique targets`);
+        targets.forEach(sid => {
+            io.to(sid).emit('callAccepted', data.signal);
+        });
+    });
+
+    socket.on('iceCandidate', (data) => {
+        const target = data.to?.toString();
+        const targets = new Set();
+        const roomSockets = io.sockets.adapter.rooms.get(target);
+        if (roomSockets) roomSockets.forEach(id => targets.add(id));
+        if (userSockets[target]) userSockets[target].forEach(id => targets.add(id));
+
+        targets.forEach(sid => {
+            io.to(sid).emit('iceCandidate', data.candidate);
+        });
+    });
+
+    socket.on('endCall', (data) => {
+        const target = data?.to?.toString();
+        if (!target) return;
+        const targets = new Set();
+        const roomSockets = io.sockets.adapter.rooms.get(target);
+        if (roomSockets) roomSockets.forEach(id => targets.add(id));
+        if (userSockets[target]) userSockets[target].forEach(id => targets.add(id));
+
+        targets.forEach(sid => {
+            io.to(sid).emit('endCall');
+        });
     });
 
     socket.on('disconnect', () => {
