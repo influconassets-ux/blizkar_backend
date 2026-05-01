@@ -5,9 +5,10 @@ const {
     getNotifications, 
     markAsRead 
 } = require('../controllers/interactionController');
+const { protect } = require('../middleware/authMiddleware');
 
-router.post('/gift', sendGift);
-router.get('/notifications/:userId', getNotifications);
-router.put('/notifications/read/:userId', markAsRead);
+router.post('/gift', protect, sendGift);
+router.get('/notifications/:userId', protect, getNotifications);
+router.put('/notifications/read/:userId', protect, markAsRead);
 
 module.exports = router;

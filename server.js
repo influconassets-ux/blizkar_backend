@@ -46,22 +46,18 @@ require('./models/Match');
 // Connect to database
 connectDB();
 
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+
 const app = express();
 
 // Middleware
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-secret']
 }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-// Request Logger
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    next();
-});
 
 // Routes
 app.use('/api/chat', require('./routes/chatRoutes'));
@@ -76,14 +72,9 @@ app.get('/', (req, res) => {
     res.send('API is running...');
 });
 
-// Error Handler
-app.use((err, req, res, next) => {
-    if (err.type === 'entity.too.large') {
-        return res.status(413).json({ message: "The data you're sending is too large (likely the photos). Please try with smaller images." });
-    }
-    console.error(err.stack);
-    res.status(500).json({ message: "Internal server error" });
-});
+// Middleware for errors
+app.use(notFound);
+app.use(errorHandler);
 
 const http = require('http');
 const { Server } = require('socket.io');

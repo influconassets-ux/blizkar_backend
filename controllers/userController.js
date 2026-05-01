@@ -8,8 +8,13 @@ const Match = require('../models/Match');
 exports.getUsers = async (req, res) => {
     try {
         const { admin, limit = 20 } = req.query;
+        const userId = req.user?._id;
         // Hide all users in discreet mode from the general discovery list unless admin
-        const query = admin === 'true' ? {} : { discreetMode: { $ne: true } };
+        // Also hide the current user from their own discovery feed
+        const query = admin === 'true' ? {} : { 
+            discreetMode: { $ne: true },
+            _id: { $ne: userId }
+        };
 
         const users = await User.find(query)
             .sort({ createdAt: -1 })
@@ -29,8 +34,8 @@ exports.getUsers = async (req, res) => {
 // @route   PUT /api/users/discreet
 exports.toggleDiscreetMode = async (req, res) => {
     try {
-        const { userId, discreetMode } = req.body;
-        const user = await User.findByIdAndUpdate(userId, { discreetMode }, { new: true });
+        const { discreetMode } = req.body;
+        const user = await User.findByIdAndUpdate(req.user._id, { discreetMode }, { new: true });
         res.json(user);
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -42,7 +47,8 @@ const { processPhotos } = require('../utils/cloudinaryHelper');
 // @route   PUT /api/users/profile
 exports.updateProfile = async (req, res) => {
     try {
-        let { userId, photos, ...updates } = req.body;
+        let { photos, ...updates } = req.body;
+        const userId = req.user._id;
         console.log(`[updateProfile] Updating user ${userId}`);
         
         // Don't allow updating sensitive or immutable fields

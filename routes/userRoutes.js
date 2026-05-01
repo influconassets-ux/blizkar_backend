@@ -2,25 +2,26 @@ const express = require('express');
 const router = express.Router();
 const { getUsers, toggleDiscreetMode, updateProfile } = require('../controllers/userController');
 const User = require('../models/User');
+const { protect } = require('../middleware/authMiddleware');
 
-router.get('/', getUsers);
-router.put('/discreet', toggleDiscreetMode);
-router.put('/profile', updateProfile);
+router.get('/', protect, getUsers);
+router.put('/discreet', protect, toggleDiscreetMode);
+router.put('/profile', protect, updateProfile);
 
-router.post('/block', async (req, res) => {
+router.post('/block', protect, async (req, res) => {
     try {
-        const { userId, targetId } = req.body;
-        await User.findByIdAndUpdate(userId, { $addToSet: { blockedUsers: targetId } });
+        const { targetId } = req.body;
+        await User.findByIdAndUpdate(req.user._id, { $addToSet: { blockedUsers: targetId } });
         res.json({ message: 'User blocked' });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-router.post('/unblock', async (req, res) => {
+router.post('/unblock', protect, async (req, res) => {
     try {
-        const { userId, targetId } = req.body;
-        await User.findByIdAndUpdate(userId, { $pull: { blockedUsers: targetId } });
+        const { targetId } = req.body;
+        await User.findByIdAndUpdate(req.user._id, { $pull: { blockedUsers: targetId } });
         res.json({ message: 'User unblocked' });
     } catch (error) {
         res.status(500).json({ message: error.message });

@@ -5,9 +5,10 @@ const {
     updateMatchStatus,
     getMatchStatus
 } = require('../controllers/matchController');
+const { protect } = require('../middleware/authMiddleware');
 
-router.get('/status/:userId/:targetId', getMatchStatus);
-router.get('/:userId', getMatches);
-router.put('/:matchId', updateMatchStatus);
+router.get('/status/:userId/:targetId', protect, getMatchStatus);
+router.get('/:userId', protect, getMatches);
+router.put('/:matchId', protect, updateMatchStatus);
 
 module.exports = router;

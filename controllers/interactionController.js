@@ -6,9 +6,10 @@ const Match = require('../models/Match');
 // @route   POST /api/interactions/gift
 exports.sendGift = async (req, res) => {
     try {
-        const { senderId, recipientId, gift } = req.body;
+        const { recipientId, gift } = req.body;
+        const senderId = req.user._id;
 
-        const sender = await User.findById(senderId);
+        const sender = req.user; // Already populated by authMiddleware
         const recipient = await User.findById(recipientId);
 
         if (!sender || !recipient) {
@@ -88,7 +89,7 @@ exports.sendGift = async (req, res) => {
 // @route   GET /api/interactions/notifications/:userId
 exports.getNotifications = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
         const notifications = await Notification.find({ recipient: userId })
             .populate('sender', 'name photos')
             .sort({ createdAt: -1 })
@@ -105,7 +106,7 @@ exports.getNotifications = async (req, res) => {
 // @route   PUT /api/interactions/notifications/read/:userId
 exports.markAsRead = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
         await Notification.updateMany(
             { recipient: userId, read: false },
             { $set: { read: true } }

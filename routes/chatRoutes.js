@@ -16,9 +16,10 @@ const upload = multer({ storage });
 const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
+const { protect } = require('../middleware/authMiddleware');
 
 // 0. Upload Route for Media (WhatsApp-Style UNBREAKABLE Logic)
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', protect, upload.single('file'), async (req, res) => {
     let tempFilePath = null;
     let fileBase64 = null;
     try {
@@ -81,7 +82,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 });
 
 // 1. Admin Routes (Prioritize these)
-router.get('/admin/conversations/:userId', async (req, res) => {
+router.get('/admin/conversations/:userId', protect, async (req, res) => {
     try {
         const { userId } = req.params;
 
@@ -126,7 +127,7 @@ router.get('/admin/conversations/:userId', async (req, res) => {
     }
 });
 
-router.get('/admin/history/:userId/:otherUserId', async (req, res) => {
+router.get('/admin/history/:userId/:otherUserId', protect, async (req, res) => {
     try {
         const { userId, otherUserId } = req.params;
 
@@ -143,12 +144,10 @@ router.get('/admin/history/:userId/:otherUserId', async (req, res) => {
     }
 });
 
-// 2. Specific routes
-router.get('/conversations/:userId', async (req, res) => {
+router.get('/conversations/:userId', protect, async (req, res) => {
     const start = Date.now();
     try {
-        let { userId } = req.params;
-        userId = userId.trim().substring(0, 24);
+        const userId = req.user._id.toString();
 
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ message: "Invalid user ID" });
@@ -272,9 +271,9 @@ router.get('/conversations/:userId', async (req, res) => {
     }
 });
 
-router.get('/new-matches/:userId', async (req, res) => {
+router.get('/new-matches/:userId', protect, async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
 
         // 1. Get all accepted matches
         const matches = await Match.find({
@@ -285,7 +284,7 @@ router.get('/new-matches/:userId', async (req, res) => {
         });
 
         const matchedUserIds = matches.map(m => 
-            m.sender.toString() === userId ? m.receiver.toString() : m.sender.toString()
+            m.sender.toString() === userId.toString() ? m.receiver.toString() : m.sender.toString()
         );
 
         // 2. Find which of these users have NO messages with the current user
@@ -319,9 +318,9 @@ router.get('/new-matches/:userId', async (req, res) => {
 });
 
 
-router.get('/unread-count/:userId', async (req, res) => {
+router.get('/unread-count/:userId', protect, async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
         const count = await Message.countDocuments({
             receiver: userId,
             read: false
@@ -333,9 +332,9 @@ router.get('/unread-count/:userId', async (req, res) => {
     }
 });
 
-router.get('/unread-senders/:userId', async (req, res) => {
+router.get('/unread-senders/:userId', protect, async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
         const senderIds = await Message.distinct('sender', {
             receiver: userId,
             read: false
@@ -348,13 +347,14 @@ router.get('/unread-senders/:userId', async (req, res) => {
 });
 
 // 2. Parameterized routes LAST
-router.get('/:userId/:otherUserId', async (req, res) => {
+router.get('/:userId/:otherUserId', protect, async (req, res) => {
     const start = Date.now();
     try {
-        let { userId, otherUserId } = req.params;
+        const { otherUserId } = req.params;
+        const userId = req.user._id.toString();
 
         // Explicitly cast to ObjectId for maximum index performance
-        const userObjId = new mongoose.Types.ObjectId(userId.trim().substring(0, 24));
+        const userObjId = req.user._id;
         const otherUserObjId = new mongoose.Types.ObjectId(otherUserId.trim().substring(0, 24));
 
         let { limit = 50, before } = req.query;
@@ -423,9 +423,10 @@ router.get('/:userId/:otherUserId', async (req, res) => {
 });
 
 // Mark messages as read
-router.put('/read/:userId/:otherUserId', async (req, res) => {
+router.put('/read/:userId/:otherUserId', protect, async (req, res) => {
     try {
-        const { userId, otherUserId } = req.params;
+        const { otherUserId } = req.params;
+        const userId = req.user._id;
         await Message.updateMany(
             { sender: otherUserId, receiver: userId, read: false },
             { $set: { read: true } }
@@ -448,11 +449,11 @@ router.get('/debug/all', async (req, res) => {
 });
 
 // 3. Delete Conversation
-router.delete('/conversation/:userId/:otherUserId', async (req, res) => {
+router.delete('/conversation/:userId/:otherUserId', protect, async (req, res) => {
     try {
-        let { userId, otherUserId } = req.params;
-        userId = userId.trim().substring(0, 24);
-        otherUserId = otherUserId.trim().substring(0, 24);
+        const { otherUserId: rawOtherUserId } = req.params;
+        const userId = req.user._id.toString();
+        const otherUserId = rawOtherUserId.trim().substring(0, 24);
 
         if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(otherUserId)) {
             return res.status(400).json({ message: "Invalid user IDs" });
@@ -473,10 +474,11 @@ router.delete('/conversation/:userId/:otherUserId', async (req, res) => {
 });
 
 // Clear Chat (Soft Delete)
-router.post('/clear/:userId/:otherUserId', async (req, res) => {
+router.post('/clear/:userId/:otherUserId', protect, async (req, res) => {
     try {
-        let { userId, otherUserId } = req.params;
-        const userObjId = new mongoose.Types.ObjectId(userId.trim().substring(0, 24));
+        const { otherUserId } = req.params;
+        const userId = req.user._id.toString();
+        const userObjId = req.user._id;
         const otherUserObjId = new mongoose.Types.ObjectId(otherUserId.trim().substring(0, 24));
 
         // Add user to deletedBy array for all messages in this conversation
@@ -499,7 +501,7 @@ router.post('/clear/:userId/:otherUserId', async (req, res) => {
 });
 
 // 3. Single message fetch (for truncated content)
-router.get('/message/:messageId', async (req, res) => {
+router.get('/message/:messageId', protect, async (req, res) => {
     try {
         const { messageId } = req.params;
         if (!mongoose.Types.ObjectId.isValid(messageId)) {

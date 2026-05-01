@@ -5,7 +5,7 @@ const User = require('../models/User');
 // @route   GET /api/matches/:userId?status=pending|accepted|received
 exports.getMatches = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user._id;
         const { status } = req.query;
 
         let query = {};
@@ -37,7 +37,7 @@ exports.getMatches = async (req, res) => {
 
         // Transform the output to return the "other" user
         const result = matches.map(m => {
-            const otherUser = m.sender._id.toString() === userId ? m.receiver : m.sender;
+            const otherUser = m.sender._id.toString() === userId.toString() ? m.receiver : m.sender;
             return {
                 matchId: m._id,
                 status: m.status,
@@ -68,6 +68,11 @@ exports.updateMatchStatus = async (req, res) => {
         const match = await Match.findById(matchId).populate('sender').populate('receiver');
         if (!match) {
             return res.status(404).json({ message: "Match request not found" });
+        }
+
+        // Only the receiver of the match request can update its status
+        if (match.receiver._id.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: "Not authorized to update this match" });
         }
 
         match.status = status;
@@ -112,7 +117,8 @@ exports.updateMatchStatus = async (req, res) => {
 // @route   GET /api/matches/status/:userId/:targetId
 exports.getMatchStatus = async (req, res) => {
     try {
-        const { userId, targetId } = req.params;
+        const userId = req.user._id;
+        const { targetId } = req.params;
         const match = await Match.findOne({
             $or: [
                 { sender: userId, receiver: targetId },
