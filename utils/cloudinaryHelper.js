@@ -34,8 +34,8 @@ const uploadBase64Image = async (base64String, folder = 'blikzr_profiles') => {
  */
 const processPhotos = async (photos) => {
   if (!Array.isArray(photos) || photos.length === 0) return [];
-  
-  const uploadPromises = photos.map(photo => uploadBase64Image(photo));
+  const validPhotos = photos.filter(p => typeof p === 'string' && p.trim().length > 0);
+  const uploadPromises = validPhotos.map(photo => uploadBase64Image(photo));
   return Promise.all(uploadPromises);
 };
 
