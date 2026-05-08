@@ -21,9 +21,8 @@ const uploadBase64Image = async (base64String, folder = 'blikzr_profiles') => {
     return result.secure_url;
   } catch (error) {
     console.error('Cloudinary Upload Error:', error);
-    // If upload fails, return original (fallback to database storage if necessary, 
-    // though we should probably throw an error here)
-    return base64String;
+    // If upload fails, return null instead of saving massive base64 strings to the database
+    return null;
   }
 };
 
@@ -36,7 +35,8 @@ const processPhotos = async (photos) => {
   if (!Array.isArray(photos) || photos.length === 0) return [];
   const validPhotos = photos.filter(p => typeof p === 'string' && p.trim().length > 0);
   const uploadPromises = validPhotos.map(photo => uploadBase64Image(photo));
-  return Promise.all(uploadPromises);
+  const results = await Promise.all(uploadPromises);
+  return results.filter(url => url !== null);
 };
 
 module.exports = { uploadBase64Image, processPhotos };

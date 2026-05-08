@@ -6,9 +6,7 @@ const protect = async (req, res, next) => {
 
     // Check for Admin Secret (Bypass for Admin Panel)
     const adminSecret = req.headers['x-admin-secret'];
-    const serverSecret = process.env.ADMIN_SECRET;
-
-    if (adminSecret && serverSecret && adminSecret.trim() === serverSecret.trim()) {
+    if (adminSecret && adminSecret === process.env.ADMIN_SECRET) {
         req.user = { role: 'admin', _id: 'admin' }; // Mock admin user
         return next();
     }
